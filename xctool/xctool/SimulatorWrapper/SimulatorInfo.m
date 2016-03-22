@@ -522,16 +522,12 @@ static const NSInteger KProductTypeIpad = 2;
 {
   static NSMutableDictionary *map;
   static dispatch_once_t onceToken;
-  static dispatch_queue_t accessQueue;
   dispatch_once(&onceToken, ^{
     map = [@{} mutableCopy];
-    accessQueue = dispatch_queue_create("com.xctool.access_root_with_sdk_version", NULL);
   });
 
   __block DTiPhoneSimulatorSystemRoot *root = nil;
-  dispatch_sync(accessQueue, ^{
-    root = map[version];
-  });
+  root = map[version];
 
   if (root) {
     return root;
@@ -545,9 +541,7 @@ static const NSInteger KProductTypeIpad = 2;
   }];
 
   if (root) {
-    dispatch_async(accessQueue, ^{
       map[version] = root;
-    });
   }
 
   return root;
