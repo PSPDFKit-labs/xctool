@@ -110,6 +110,26 @@
                        @"TestProject_Library_XCTest_OSXTests/testWillPass"]));
 }
 
+- (void)testCanQueryCustomXCTestClasses
+{
+  if (!HasXCTestFramework()) {
+    return;
+  }
+
+  NSString *error = nil;
+  NSDictionary *buildSettings = @{
+    Xcode_BUILT_PRODUCTS_DIR : AbsolutePathFromRelative(TEST_DATA @"tests-osx-test-bundle"),
+    Xcode_FULL_PRODUCT_NAME : @"TestProject-Library-XCTest-CustomTests.xctest",
+    Xcode_TARGETED_DEVICE_FAMILY : @"1",
+  };
+  OCUnitTestQueryRunner *runner = [[OCUnitOSXLogicTestQueryRunner alloc] initWithSimulatorInfo:[SimulatorInfo simulatorInfoWithBuildSettings:buildSettings]];
+  NSArray *classes = [runner runQueryWithError:&error];
+  assertThat(error, is(nilValue()));
+  assertThat(classes,
+             equalTo(@[@"TestProject_Library_XCTest_CustomTests/customTest",
+                       @"TestProject_Library_XCTest_CustomTests/customTestWithInteger:"]));
+}
+
 - (void)testCanQueryClassesFromIOSBundle
 {
   if (ToolchainIsXcode7OrBetter()) {
@@ -124,6 +144,7 @@
     Xcode_FULL_PRODUCT_NAME : @"TestProject-LibraryTests.octest",
     Xcode_SDK_NAME : latestSDK,
     Xcode_TARGETED_DEVICE_FAMILY : @"1",
+    Xcode_PLATFORM_NAME : @"iphonesimulator",
   };
 
   OCUnitTestQueryRunner *runner = [[OCUnitIOSLogicTestQueryRunner alloc] initWithSimulatorInfo:[SimulatorInfo simulatorInfoWithBuildSettings:buildSettings]];
@@ -155,7 +176,8 @@
     Xcode_BUILT_PRODUCTS_DIR : AbsolutePathFromRelative(TEST_DATA @"tests-ios-test-bundle"),
     Xcode_FULL_PRODUCT_NAME : @"TestProject-Library-XCTest-iOSTests.xctest",
     Xcode_SDK_NAME : latestSDK,
-    };
+    Xcode_PLATFORM_NAME : @"iphonesimulator",
+  };
   OCUnitTestQueryRunner *runner = [[OCUnitIOSLogicTestQueryRunner alloc] initWithSimulatorInfo:[SimulatorInfo simulatorInfoWithBuildSettings:buildSettings]];
   NSArray *classes = [runner runQueryWithError:&error];
 
@@ -181,11 +203,12 @@
 
   NSString *error = nil;
   NSDictionary *buildSettings = @{
-                                  Xcode_BUILT_PRODUCTS_DIR : AbsolutePathFromRelative(TEST_DATA @"KiwiTests/Build/Products/Debug-iphonesimulator"),
-                                  Xcode_FULL_PRODUCT_NAME : @"KiwiTests-OCUnit.octest",
-                                  Xcode_SDK_NAME : GetAvailableSDKsAndAliases()[@"iphonesimulator"],
-                                  Xcode_TARGETED_DEVICE_FAMILY : @"1",
-                                  };
+    Xcode_BUILT_PRODUCTS_DIR : AbsolutePathFromRelative(TEST_DATA @"KiwiTests/Build/Products/Debug-iphonesimulator"),
+    Xcode_FULL_PRODUCT_NAME : @"KiwiTests-OCUnit.octest",
+    Xcode_SDK_NAME : GetAvailableSDKsAndAliases()[@"iphonesimulator"],
+    Xcode_TARGETED_DEVICE_FAMILY : @"1",
+    Xcode_PLATFORM_NAME : @"iphonesimulator",
+  };
   OCUnitTestQueryRunner *runner = [[OCUnitIOSLogicTestQueryRunner alloc] initWithSimulatorInfo:[SimulatorInfo simulatorInfoWithBuildSettings:buildSettings]];
   NSArray *cases = [runner runQueryWithError:&error];
   assertThat(cases, equalTo(@[
@@ -204,11 +227,12 @@
 
   NSString *error = nil;
   NSDictionary *buildSettings = @{
-                                  Xcode_BUILT_PRODUCTS_DIR : AbsolutePathFromRelative(TEST_DATA @"KiwiTests/Build/Products/Debug-iphonesimulator"),
-                                  Xcode_FULL_PRODUCT_NAME : @"KiwiTests-XCTest.xctest",
-                                  Xcode_SDK_NAME : GetAvailableSDKsAndAliases()[@"iphonesimulator"],
-                                  Xcode_TARGETED_DEVICE_FAMILY : @"1",
-                                  };
+    Xcode_BUILT_PRODUCTS_DIR : AbsolutePathFromRelative(TEST_DATA @"KiwiTests/Build/Products/Debug-iphonesimulator"),
+    Xcode_FULL_PRODUCT_NAME : @"KiwiTests-XCTest.xctest",
+    Xcode_SDK_NAME : GetAvailableSDKsAndAliases()[@"iphonesimulator"],
+    Xcode_TARGETED_DEVICE_FAMILY : @"1",
+    Xcode_PLATFORM_NAME : @"iphonesimulator",
+  };
   OCUnitTestQueryRunner *runner = [[OCUnitIOSLogicTestQueryRunner alloc] initWithSimulatorInfo:[SimulatorInfo simulatorInfoWithBuildSettings:buildSettings]];
   NSArray *cases = [runner runQueryWithError:&error];
   assertThat(cases, equalTo(@[
@@ -227,12 +251,13 @@
 
   NSString *error = nil;
   NSDictionary *buildSettings = @{
-                                  Xcode_BUILT_PRODUCTS_DIR : AbsolutePathFromRelative(TEST_DATA @"KiwiTests/Build/Products/Debug-iphonesimulator"),
-                                  Xcode_FULL_PRODUCT_NAME : @"KiwiTests-XCTest-AppTests.xctest",
-                                  Xcode_SDK_NAME : GetAvailableSDKsAndAliases()[@"iphonesimulator"],
-                                  Xcode_TEST_HOST : AbsolutePathFromRelative(TEST_DATA @"KiwiTests/Build/Products/Debug-iphonesimulator/KiwiTests-TestHost.app/KiwiTests-TestHost"),
-                                  Xcode_TARGETED_DEVICE_FAMILY : @"1",
-                                  };
+    Xcode_BUILT_PRODUCTS_DIR : AbsolutePathFromRelative(TEST_DATA @"KiwiTests/Build/Products/Debug-iphonesimulator"),
+    Xcode_FULL_PRODUCT_NAME : @"KiwiTests-XCTest-AppTests.xctest",
+    Xcode_SDK_NAME : GetAvailableSDKsAndAliases()[@"iphonesimulator"],
+    Xcode_TEST_HOST : AbsolutePathFromRelative(TEST_DATA @"KiwiTests/Build/Products/Debug-iphonesimulator/KiwiTests-TestHost.app/KiwiTests-TestHost"),
+    Xcode_TARGETED_DEVICE_FAMILY : @"1",
+    Xcode_PLATFORM_NAME : @"iphonesimulator",
+  };
   OCUnitTestQueryRunner *runner = [[OCUnitIOSAppTestQueryRunner alloc] initWithSimulatorInfo:[SimulatorInfo simulatorInfoWithBuildSettings:buildSettings]];
   NSArray *cases = [runner runQueryWithError:&error];
   assertThat(cases, equalTo(@[
@@ -252,12 +277,13 @@
 
   NSString *error = nil;
   NSDictionary *buildSettings = @{
-                                  Xcode_BUILT_PRODUCTS_DIR : AbsolutePathFromRelative(TEST_DATA @"KiwiTests/Build/Products/Debug-iphonesimulator"),
-                                  Xcode_FULL_PRODUCT_NAME : @"KiwiTests-OCUnit-AppTests.octest",
-                                  Xcode_SDK_NAME : GetAvailableSDKsAndAliases()[@"iphonesimulator"],
-                                  Xcode_TEST_HOST : AbsolutePathFromRelative(TEST_DATA @"KiwiTests/Build/Products/Debug-iphonesimulator/KiwiTests-TestHost.app/KiwiTests-TestHost"),
-                                  Xcode_TARGETED_DEVICE_FAMILY : @"1",
-                                  };
+    Xcode_BUILT_PRODUCTS_DIR : AbsolutePathFromRelative(TEST_DATA @"KiwiTests/Build/Products/Debug-iphonesimulator"),
+    Xcode_FULL_PRODUCT_NAME : @"KiwiTests-OCUnit-AppTests.octest",
+    Xcode_SDK_NAME : GetAvailableSDKsAndAliases()[@"iphonesimulator"],
+    Xcode_TEST_HOST : AbsolutePathFromRelative(TEST_DATA @"KiwiTests/Build/Products/Debug-iphonesimulator/KiwiTests-TestHost.app/KiwiTests-TestHost"),
+    Xcode_TARGETED_DEVICE_FAMILY : @"1",
+    Xcode_PLATFORM_NAME : @"iphonesimulator",
+  };
   OCUnitTestQueryRunner *runner = [[OCUnitIOSAppTestQueryRunner alloc] initWithSimulatorInfo:[SimulatorInfo simulatorInfoWithBuildSettings:buildSettings]];
   NSArray *cases = [runner runQueryWithError:&error];
   assertThat(cases, equalTo(@[
@@ -273,11 +299,12 @@
   NSString *error = nil;
   NSString *latestSDK = GetAvailableSDKsAndAliases()[@"iphonesimulator"];
   NSDictionary *buildSettings = @{
-                                  Xcode_BUILT_PRODUCTS_DIR : AbsolutePathFromRelative(TEST_DATA @"tests-ios-test-bundle"),
-                                  Xcode_FULL_PRODUCT_NAME : @"TestProject-Library-64bitTests.xctest",
-                                  Xcode_SDK_NAME : latestSDK,
-                                  Xcode_TARGETED_DEVICE_FAMILY : @"1",
-                                  };
+    Xcode_BUILT_PRODUCTS_DIR : AbsolutePathFromRelative(TEST_DATA @"tests-ios-test-bundle"),
+    Xcode_FULL_PRODUCT_NAME : @"TestProject-Library-64bitTests.xctest",
+    Xcode_SDK_NAME : latestSDK,
+    Xcode_TARGETED_DEVICE_FAMILY : @"1",
+    Xcode_PLATFORM_NAME : @"iphonesimulator",
+  };
 
   OCUnitTestQueryRunner *runner = [[OCUnitIOSLogicTestQueryRunner alloc] initWithSimulatorInfo:[SimulatorInfo simulatorInfoWithBuildSettings:buildSettings]];
   NSArray *classes = [runner runQueryWithError:&error];
@@ -295,11 +322,12 @@
   NSString *error = nil;
   NSString *latestSDK = GetAvailableSDKsAndAliases()[@"iphonesimulator"];
   NSDictionary *buildSettings = @{
-                                  Xcode_BUILT_PRODUCTS_DIR : AbsolutePathFromRelative(TEST_DATA @"tests-ios-test-bundle"),
-                                  Xcode_FULL_PRODUCT_NAME : @"TestProject-Library-32And64bitTests.xctest",
-                                  Xcode_SDK_NAME : latestSDK,
-                                  Xcode_TARGETED_DEVICE_FAMILY : @"1",
-                                  };
+    Xcode_BUILT_PRODUCTS_DIR : AbsolutePathFromRelative(TEST_DATA @"tests-ios-test-bundle"),
+    Xcode_FULL_PRODUCT_NAME : @"TestProject-Library-32And64bitTests.xctest",
+    Xcode_SDK_NAME : latestSDK,
+    Xcode_TARGETED_DEVICE_FAMILY : @"1",
+    Xcode_PLATFORM_NAME : @"iphonesimulator",
+  };
 
   OCUnitTestQueryRunner *runner = [[OCUnitIOSLogicTestQueryRunner alloc] initWithSimulatorInfo:[SimulatorInfo simulatorInfoWithBuildSettings:buildSettings]];
   NSArray *classes = [runner runQueryWithError:&error];
@@ -338,6 +366,7 @@
     Xcode_FULL_PRODUCT_NAME : @"TestProject-Library-OSXTests.octest",
     Xcode_SDK_NAME : latestSDK,
     Xcode_TARGETED_DEVICE_FAMILY : @"1",
+    Xcode_PLATFORM_NAME : @"iphonesimulator",
   };
   OCUnitTestQueryRunner *runner = [[OCUnitIOSLogicTestQueryRunner alloc] initWithSimulatorInfo:[SimulatorInfo simulatorInfoWithBuildSettings:buildSettings]];
   NSArray *classes = [runner runQueryWithError:&error];
@@ -357,6 +386,7 @@
     Xcode_SDK_NAME : latestSDK,
     Xcode_TEST_HOST : @"/path/to/executable/that/does/not/exist",
     Xcode_TARGETED_DEVICE_FAMILY : @"1",
+    Xcode_PLATFORM_NAME : @"iphonesimulator",
   };
   OCUnitTestQueryRunner *runner = [[OCUnitIOSAppTestQueryRunner alloc] initWithSimulatorInfo:[SimulatorInfo simulatorInfoWithBuildSettings:buildSettings]];
   NSArray *classes = [runner runQueryWithError:&error];

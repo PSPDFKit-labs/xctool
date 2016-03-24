@@ -304,8 +304,7 @@
                                      outputPath:@"-"];
     [_reporters addObject:reporterTask];
 
-    if (![[[NSProcessInfo processInfo] environment][@"TRAVIS"] isEqualToString:@"true"] &&
-        !IsRunningUnderTest()) {
+    if (!IsRunningOnCISystem() && !IsRunningUnderTest()) {
       ReporterTask *userNotificationsReporterTask =
       [[ReporterTask alloc] initWithReporterPath:[XCToolReportersPath() stringByAppendingPathComponent:@"user-notifications"]
                                        outputPath:@"-"];
@@ -564,9 +563,13 @@
     // sourcecode.c.objc for architecture i386
     //
     // Explicitly setting PLATFORM_NAME=iphonesimulator seems to fix it.
-    if (!_buildSettings[Xcode_PLATFORM_NAME] &&
-        [_sdk hasPrefix:@"iphonesimulator"]) {
-      _buildSettings[Xcode_PLATFORM_NAME] = @"iphonesimulator";
+    //
+    // This also works around a bug in Xcode 7.2, where it seems to not
+    // set the platform correctly when -sdk is provided. Setting the
+    // platform name manually works to correct the platform it picks.
+    if (!_buildSettings[Xcode_PLATFORM_NAME]) {
+      NSString *platformName = [[[_platformPath lastPathComponent] stringByDeletingPathExtension] lowercaseString];
+      _buildSettings[Xcode_PLATFORM_NAME] = platformName;
     }
   }
   return YES;
@@ -576,7 +579,25 @@
   if (_destination) {
     NSDictionary *destInfo = ParseDestinationString(_destination, errorMessage);
 
+    NSString *deviceID = destInfo[@"id"];
     NSString *deviceName = destInfo[@"name"];
+    NSString *deviceOS = destInfo[@"OS"];
+
+    if (deviceID) {
+      NSUUID *udid = [[NSUUID alloc] initWithUUIDString:deviceID];
+      if ([SimulatorInfo deviceWithUDID:udid]) {
+        if (deviceName || deviceOS) {
+          *errorMessage = @"If device id is specified, name or OS must not be specified.";
+          return NO;
+        } else {
+          return YES;
+        }
+      } else {
+        *errorMessage = [NSString stringWithFormat:@"'%@' isn't a valid device id.", deviceID];
+        return NO;
+      }
+    }
+
     if (deviceName) {
       NSString *deviceSystemName = [SimulatorInfo deviceNameForAlias:deviceName];
       if (![deviceName isEqual:deviceSystemName] &&
@@ -593,21 +614,13 @@
         return NO;
       }
     }
-    if (destInfo[@"OS"]) {
-      NSString *osVersion = [SimulatorInfo sdkVersionForOSVersion:destInfo[@"OS"]];
-      if (!osVersion) {
+
+    if (deviceOS && deviceName) {
+      if (![SimulatorInfo isSdkVersion:deviceOS supportedByDevice:deviceName]) {
         *errorMessage = [NSString stringWithFormat:
-                         @"'%@' isn't a valid iOS version. The valid iOS versions are: %@.",
-                         destInfo[@"OS"], [SimulatorInfo availableSdkVersions]];
+                         @"Device with name '%@' doesn't support iOS version '%@'. The supported iOS versions are: %@.",
+                         deviceName, deviceOS, [SimulatorInfo sdksSupportedByDevice:deviceName]];
         return NO;
-      }
-      if (deviceName) {
-        if (![SimulatorInfo isSdkVersion:osVersion supportedByDevice:deviceName]) {
-          *errorMessage = [NSString stringWithFormat:
-                           @"Device with name '%@' doesn't support iOS version '%@'. The supported iOS versions are: %@.",
-                           deviceName, osVersion, [SimulatorInfo sdksSupportedByDevice:deviceName]];
-          return NO;
-        }
       }
     }
   }

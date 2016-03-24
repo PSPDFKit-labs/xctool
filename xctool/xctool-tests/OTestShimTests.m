@@ -44,6 +44,7 @@ static NSArray *AllTestCasesInTestBundle(NSString *sdkName,
     Xcode_FULL_PRODUCT_NAME : fullProductName,
     Xcode_SDK_NAME : latestSDK,
     Xcode_TARGETED_DEVICE_FAMILY : @"1",
+    Xcode_PLATFORM_NAME: @"iphonesimulator",
   };
   OCUnitTestQueryRunner *runner = [[testQueryClass alloc] initWithSimulatorInfo:simulatorInfo];
   NSArray *allTests = [runner runQueryWithError:&error];
@@ -72,7 +73,8 @@ static NSTask *OtestShimTask(NSString *platformName,
                              NSString *targetName,
                              NSString *bundlePath,
                              NSArray *focusedTests,
-                             NSArray *allTests)
+                             NSArray *allTests,
+                             NSString **otestShimOutputPath)
 {
   // Make sure supplied files actually exist at their supposed paths.
   NSCAssert([[NSFileManager defaultManager] fileExistsAtPath:bundlePath], @"Bundle does not exist at '%@'", bundlePath);
@@ -115,11 +117,16 @@ static NSTask *OtestShimTask(NSString *platformName,
                                                                         environment:@{}
                                                                      freshSimulator:NO
                                                                      resetSimulator:NO
+                                                               newSimulatorInstance:NO
                                                           noResetSimulatorOnFailure:NO
                                                                        freshInstall:NO
                                                                         testTimeout:1
-                                                                          reporters:@[]];
-  NSTask *task = [runner otestTaskWithTestBundle: bundlePath];
+                                                                          reporters:@[]
+                                                                 processEnvironment:@{}];
+  NSTask *task = [runner otestTaskWithTestBundle:bundlePath otestShimOutputPath:otestShimOutputPath];
+  if ([platformName isEqual:@"MacOSX"]) {
+    [task setCurrentDirectoryPath:targetSettings[Xcode_BUILT_PRODUCTS_DIR]];
+  }
 
   // Make sure launch path is accessible.
   NSString *launchPath = [task launchPath];
@@ -129,7 +136,7 @@ static NSTask *OtestShimTask(NSString *platformName,
 }
 
 
-static NSTask *OtestShimTaskIOS(NSString *settingsPath, NSString *targetName, NSString *bundlePath, NSArray *focusedTests, NSArray *allTests)
+static NSTask *OtestShimTaskIOS(NSString *settingsPath, NSString *targetName, NSString *bundlePath, NSArray *focusedTests, NSArray *allTests, NSString **otestShimOutputPath)
 {
   return OtestShimTask(@"iPhoneSimulator",
                        [OCUnitIOSLogicTestRunner class],
@@ -137,10 +144,11 @@ static NSTask *OtestShimTaskIOS(NSString *settingsPath, NSString *targetName, NS
                        targetName,
                        bundlePath,
                        focusedTests,
-                       allTests);
+                       allTests,
+                       otestShimOutputPath);
 }
 
-static NSTask *OtestShimTaskOSX(NSString *settingsPath, NSString *targetName, NSString *bundlePath, NSArray *focusedTests, NSArray *allTests)
+static NSTask *OtestShimTaskOSX(NSString *settingsPath, NSString *targetName, NSString *bundlePath, NSArray *focusedTests, NSArray *allTests, NSString **otestShimOutputPath)
 {
   return OtestShimTask(@"MacOSX",
                        [OCUnitOSXLogicTestRunner class],
@@ -148,42 +156,61 @@ static NSTask *OtestShimTaskOSX(NSString *settingsPath, NSString *targetName, NS
                        targetName,
                        bundlePath,
                        focusedTests,
-                       allTests);
+                       allTests,
+                       otestShimOutputPath);
 }
 
 // returns nil when an error is encountered
-static NSArray *RunOtestAndParseResult(NSTask *task)
+static NSArray *RunOtestAndParseResult(NSTask *task, NSString *otestShimOutputPath)
 {
   NSMutableArray *resultBuilder = [NSMutableArray array];
 
-  // Set to the null device we don't get the 'Simulator does not seem to be
-  // running, or may be running an old SDK.' from the 'sim' launcher.
-  [task setStandardError:[NSFileHandle fileHandleWithNullDevice]];
+  if (otestShimOutputPath) {
+    LaunchTaskAndFeedSimulatorOutputAndOtestShimEventsToBlock(
+      task,
+      @"running otest/xctest",
+      otestShimOutputPath,
+      ^(int fd, NSString *line) {
+        NSError *error = nil;
 
-  LaunchTaskAndFeedOuputLinesToBlock(task,
-                                     @"running otest/xctest",
-                                     ^void (NSString *line) {
-    NSError *error = nil;
+        if (([line isEqualToString:@""])) {
+          return;
+        }
 
-    if (([line isEqualToString:@""])) {
-      return;
-    }
+        NSData *data = [line dataUsingEncoding:NSUTF8StringEncoding];
+        NSDictionary *jsonObj = [NSJSONSerialization JSONObjectWithData:data
+                                                                options:0
+                                                                  error:&error];
 
-    NSData *data = [line dataUsingEncoding:NSUTF8StringEncoding];
-    NSDictionary *jsonObj = [NSJSONSerialization JSONObjectWithData:data
-                                                            options:0
-                                                              error:&error];
+        NSCAssert(!error, @"Each line should be a well-formed JSON object.");
+        [resultBuilder addObject:jsonObj];
+    });
+  } else {
+    LaunchTaskAndFeedOuputLinesToBlock(task,
+                                       @"running otest/xctest",
+                                       ^void (int fd, NSString *line) {
+      NSError *error = nil;
 
-    NSCAssert(!error, @"Each line should be a well-formed JSON object.");
-    [resultBuilder addObject:jsonObj];
-  });
+      if (([line isEqualToString:@""])) {
+        return;
+      }
+
+      NSData *data = [line dataUsingEncoding:NSUTF8StringEncoding];
+      NSDictionary *jsonObj = [NSJSONSerialization JSONObjectWithData:data
+                                                              options:0
+                                                                error:&error];
+
+      NSCAssert(!error, @"Each line should be a well-formed JSON object.");
+      [resultBuilder addObject:jsonObj];
+    });
+  }
 
   // There should have been at least one JSON object.
   if ([resultBuilder count] == 0) {
     return nil;
   }
 
-  return resultBuilder;
+  return [resultBuilder copy];
 }
 
 static NSDictionary *ExtractEvent(NSArray *events, NSString *eventType)
@@ -214,8 +241,9 @@ static NSDictionary *ExtractEvent(NSArray *events, NSString *eventType)
   NSString *methodName = @"-[SenTestingKit_Assertion testAssertionFailure]";
 
   NSArray *allTests = AllTestCasesInTestBundleIOS(bundlePath);
-  NSTask *task = OtestShimTaskIOS(settingsPath, targetName, bundlePath, testList, allTests);
-  NSArray *events = RunOtestAndParseResult(task);
+  NSString *otestShimOutputPath;
+  NSTask *task = OtestShimTaskIOS(settingsPath, targetName, bundlePath, testList, allTests, &otestShimOutputPath);
+  NSArray *events = RunOtestAndParseResult(task, otestShimOutputPath);
 
   NSDictionary *testEndEvent = ExtractEvent(events, kReporter_Events_EndTest);
   assertThat(testEndEvent, hasKey(@"exceptions"));
@@ -241,8 +269,9 @@ static NSDictionary *ExtractEvent(NSArray *events, NSString *eventType)
   NSString *methodName = @"-[XCTest_Assertion testAssertionFailure]";
 
   NSArray *allTests = AllTestCasesInTestBundleIOS(bundlePath);
-  NSTask *task = OtestShimTaskIOS(settingsPath, targetName, bundlePath, testList, allTests);
-  NSArray *events = RunOtestAndParseResult(task);
+  NSString *otestShimOutputPath;
+  NSTask *task = OtestShimTaskIOS(settingsPath, targetName, bundlePath, testList, allTests, &otestShimOutputPath);
+  NSArray *events = RunOtestAndParseResult(task, otestShimOutputPath);
 
   NSDictionary *testEndEvent = ExtractEvent(events, kReporter_Events_EndTest);
   assertThat(testEndEvent, hasKey(@"exceptions"));
@@ -269,13 +298,14 @@ static NSDictionary *ExtractEvent(NSArray *events, NSString *eventType)
   NSString *methodName = @"-[SenTestingKit_Assertion testExpectedAssertionIsSilent]";
 
   NSArray *allTests = AllTestCasesInTestBundleIOS(bundlePath);
-  NSTask *task = OtestShimTaskIOS(settingsPath, targetName, bundlePath, testList, allTests);
-  NSArray *events = RunOtestAndParseResult(task);
+  NSString *otestShimOutputPath;
+  NSTask *task = OtestShimTaskIOS(settingsPath, targetName, bundlePath, testList, allTests, &otestShimOutputPath);
+  NSArray *events = RunOtestAndParseResult(task, otestShimOutputPath);
 
   NSDictionary *testBeginEvent = ExtractEvent(events, kReporter_Events_BeginTest);
   assertThat(testBeginEvent, hasKey(@"test"));
   assertThat(testBeginEvent[@"test"], is(methodName));
-  NSDictionary *testOutputEvent = ExtractEvent(events, kReporter_Events_TestOuput);
+  NSDictionary *testOutputEvent = ExtractEvent(events, kReporter_Events_SimulatorOuput);
   assertThat(testOutputEvent, hasKey(@"output"));
   assertThat(testOutputEvent[@"output"], isNot(containsAssertionFailureFromMethod(methodName)));
   assertThat(testOutputEvent[@"output"], containsString(@"[GOOD1]"));
@@ -294,8 +324,9 @@ static NSDictionary *ExtractEvent(NSArray *events, NSString *eventType)
   NSString *methodName = @"-[XCTest_Assertion testExpectedAssertionIsSilent]";
 
   NSArray *allTests = AllTestCasesInTestBundleIOS(bundlePath);
-  NSTask *task = OtestShimTaskIOS(settingsPath, targetName, bundlePath, testList, allTests);
-  NSArray *events = RunOtestAndParseResult(task);
+  NSString *otestShimOutputPath;
+  NSTask *task = OtestShimTaskIOS(settingsPath, targetName, bundlePath, testList, allTests, &otestShimOutputPath);
+  NSArray *events = RunOtestAndParseResult(task, otestShimOutputPath);
 
   NSDictionary *testBeginEvent = ExtractEvent(events, kReporter_Events_BeginTest);
   assertThat(testBeginEvent, hasKey(@"test"));
@@ -319,8 +350,9 @@ static NSDictionary *ExtractEvent(NSArray *events, NSString *eventType)
   NSArray *testList = @[ @"SenTestingKit_Assertion/testExpectedAssertionMissingIsNotSilent" ];
 
   NSArray *allTests = AllTestCasesInTestBundleIOS(bundlePath);
-  NSTask *task = OtestShimTaskIOS(settingsPath, targetName, bundlePath, testList, allTests);
-  NSArray *events = RunOtestAndParseResult(task);
+  NSString *otestShimOutputPath;
+  NSTask *task = OtestShimTaskIOS(settingsPath, targetName, bundlePath, testList, allTests, &otestShimOutputPath);
+  NSArray *events = RunOtestAndParseResult(task, otestShimOutputPath);
 
   NSDictionary *testEndEvent = ExtractEvent(events, kReporter_Events_EndTest);
   assertThat(testEndEvent, hasKey(@"exceptions"));
@@ -344,8 +376,9 @@ static NSDictionary *ExtractEvent(NSArray *events, NSString *eventType)
   NSArray *testList = @[ @"XCTest_Assertion/testExpectedAssertionMissingIsNotSilent" ];
 
   NSArray *allTests = AllTestCasesInTestBundleIOS(bundlePath);
-  NSTask *task = OtestShimTaskIOS(settingsPath, targetName, bundlePath, testList, allTests);
-  NSArray *events = RunOtestAndParseResult(task);
+  NSString *otestShimOutputPath;
+  NSTask *task = OtestShimTaskIOS(settingsPath, targetName, bundlePath, testList, allTests, &otestShimOutputPath);
+  NSArray *events = RunOtestAndParseResult(task, otestShimOutputPath);
 
   NSDictionary *testEndEvent = ExtractEvent(events, kReporter_Events_EndTest);
   assertThat(testEndEvent, hasKey(@"exceptions"));
@@ -365,12 +398,24 @@ static NSDictionary *ExtractEvent(NSArray *events, NSString *eventType)
   NSArray *testList = @[ @"TestThatThrowsExceptionOnStart/testExample" ];
 
   NSArray *allTests = AllTestCasesInTestBundleOSX(bundlePath);
-  NSTask *task = OtestShimTaskOSX(settingsPath, targetName, bundlePath, testList, allTests);
-  NSArray *events = RunOtestAndParseResult(task);
+  NSString *otestShimOutputPath;
+  NSTask *task = OtestShimTaskOSX(settingsPath, targetName, bundlePath, testList, allTests, &otestShimOutputPath);
+  NSArray *events = RunOtestAndParseResult(task, otestShimOutputPath);
 
-  assertThat(events, hasCountOf(2));
-  assertThat(events[0][@"event"], is(kReporter_Events_BeginTestSuite));
-  assertThat(events[1][@"event"], is(kReporter_Events_EndTestSuite));
+  NSMutableArray *significantEvents = [NSMutableArray new];
+  NSMutableArray *simOutputEvents = [NSMutableArray new];
+  for (NSDictionary *event in events) {
+    if ([event[kReporter_Event_Key] isEqual:kReporter_Events_SimulatorOuput]) {
+      [simOutputEvents addObject:event];
+    } else {
+      [significantEvents addObject:event];
+    }
+  }
+
+  assertThat(significantEvents, hasCountOf(2));
+  assertThat(significantEvents[0][@"event"], is(kReporter_Events_BeginTestSuite));
+  assertThat(significantEvents[1][@"event"], is(kReporter_Events_EndTestSuite));
+  assertThat(@(simOutputEvents.count), greaterThan(@10));
 }
 
 - (void)testSenTestingKitExceptionIsThrownWhenTestTimeoutIsHit
@@ -386,10 +431,11 @@ static NSDictionary *ExtractEvent(NSArray *events, NSString *eventType)
   NSArray *testList = @[ @"SomeTests/testTimeout" ];
 
   NSArray *allTests = AllTestCasesInTestBundleIOS(bundlePath);
-  NSTask *task = OtestShimTaskIOS(settingsPath, targetName, bundlePath, testList, allTests);
-  NSArray *events = RunOtestAndParseResult(task);
+  NSString *otestShimOutputPath;
+  NSTask *task = OtestShimTaskIOS(settingsPath, targetName, bundlePath, testList, allTests, &otestShimOutputPath);
+  NSArray *events = RunOtestAndParseResult(task, otestShimOutputPath);
 
-  NSDictionary *testOutputEvent = ExtractEvent(events, kReporter_Events_TestOuput);
+  NSDictionary *testOutputEvent = ExtractEvent(events, kReporter_Events_SimulatorOuput);
   assertThat(testOutputEvent, hasKey(@"output"));
   NSString *testOutput = testOutputEvent[@"output"];
   assertThat(testOutput, containsString(@"Test -[SomeTests testTimeout] ran longer than specified test time limit: 1 second(s)"));
@@ -399,14 +445,15 @@ static NSDictionary *ExtractEvent(NSArray *events, NSString *eventType)
 {
   NSString *bundlePath = TEST_DATA @"tests-ios-test-bundle/TestProject-Library-XCTest-iOSTests.xctest";
   NSString *targetName = @"TestProject-Library-XCTest-iOSTests";
-  NSString *settingsPath = TEST_DATA @"TestProject-Library-XCTest-iOS-TestProject-Library-XCTest-iOSTests-showBuildSettings-iphoneos.txt";
+  NSString *settingsPath = TEST_DATA @"TestProject-Library-XCTest-iOS-TestProject-Library-XCTest-iOSTests-showBuildSettings-iphonesimulator.txt";
   NSArray *testList = @[ @"SomeTests/testTimeout" ];
 
   NSArray *allTests = AllTestCasesInTestBundleIOS(bundlePath);
-  NSTask *task = OtestShimTaskIOS(settingsPath, targetName, bundlePath, testList, allTests);
-  NSArray *events = RunOtestAndParseResult(task);
+  NSString *otestShimOutputPath;
+  NSTask *task = OtestShimTaskIOS(settingsPath, targetName, bundlePath, testList, allTests, &otestShimOutputPath);
+  NSArray *events = RunOtestAndParseResult(task, otestShimOutputPath);
 
-  NSDictionary *testOutputEvent = ExtractEvent(events, kReporter_Events_TestOuput);
+  NSDictionary *testOutputEvent = ExtractEvent(events, kReporter_Events_SimulatorOuput);
   assertThat(testOutputEvent, hasKey(@"output"));
   NSString *testOutput = testOutputEvent[@"output"];
   assertThat(testOutput, containsString(@"Test -[SomeTests testTimeout] ran longer than specified test time limit: 1 second(s)"));

@@ -88,7 +88,7 @@
 
 - (void)outputBeforeTestBundleStarts:(NSDictionary *)event
 {
-  [_outputBeforeTestsStart appendString:event[kReporter_OutputBeforeTestBundleStarts_OutputKey]];
+  [_outputBeforeTestsStart appendString:event[kReporter_SimulatorOutput_OutputKey]];
 }
 
 - (void)beginTestSuite:(NSDictionary *)event
@@ -115,8 +115,9 @@
   [self publishEventToReporters:event];
 }
 
-- (void)endTest:(NSDictionary *)event
+- (void)endTest:(NSDictionary *)inEvent
 {
+  NSMutableDictionary *event = [inEvent mutableCopy];
   NSAssert(_testSuiteState, @"Ending test without a test suite");
   NSString *testName = event[kReporter_EndTest_TestKey];
   OCTestEventState *state = [_testSuiteState getTestWithTestName:testName];
@@ -124,6 +125,8 @@
   [state stateEndTest:[event[kReporter_EndTest_SucceededKey] intValue]
                result:event[kReporter_EndTest_ResultKey]
              duration:[event[kReporter_EndTest_TotalDurationKey] doubleValue]];
+
+  event[kReporter_EndTest_OutputKey] = [state outputAlreadyPublished];
 
   if (_previousTestState) {
     _previousTestState = nil;
@@ -142,9 +145,24 @@
 {
   OCTestEventState *test = [_testSuiteState runningTest];
   NSAssert(test, @"Got output with no test running");
-  [test stateTestOutput:event[kReporter_TestOutput_OutputKey]];
+  [test stateTestOutput:event[kReporter_SimulatorOutput_OutputKey]];
 
-  [self publishEventToReporters:event];
+  NSDictionary *testOutputEvent = @{
+    kReporter_Event_Key: kReporter_Events_TestOuput,
+    kReporter_TestOutput_OutputKey: event[kReporter_SimulatorOutput_OutputKey],
+    kReporter_TimestampKey: event[kReporter_TimestampKey],
+  };
+
+  [self publishEventToReporters:testOutputEvent];
+}
+
+- (void)simulatorOutput:(NSDictionary *)event
+{
+  if ([_testSuiteState runningTest]) {
+    [self testOutput:event];
+  } else {
+    [self outputBeforeTestBundleStarts:event];
+  }
 }
 
 - (void)handleStartupError:(NSString *)startupError

@@ -77,9 +77,9 @@ xcodebuild build -showBuildSettings -sdk iphonesimulator -configuration Debug -p
 OUTFILE='TestProject-Library-XCTest-iOS-showBuildSettings.txt'
 xcodebuild build -showBuildSettings -project TestProject-Library-XCTest-iOS/TestProject-Library-XCTest-iOS.xcodeproj > $OUTFILE
 
-# TestProject-Library-XCTest-iOS-TestProject-Library-XCTest-iOSTests-showBuildSettings-iphoneos.txt
-OUTFILE='TestProject-Library-XCTest-iOS-TestProject-Library-XCTest-iOSTests-showBuildSettings-iphoneos.txt'
-xcodebuild build -showBuildSettings -sdk iphoneos -project TestProject-Library-XCTest-iOS/TestProject-Library-XCTest-iOS.xcodeproj -target TestProject-Library-XCTest-iOSTests > $OUTFILE
+# TestProject-Library-XCTest-iOS-TestProject-Library-XCTest-iOSTests-showBuildSettings-iphonesimulator.txt
+OUTFILE='TestProject-Library-XCTest-iOS-TestProject-Library-XCTest-iOSTests-showBuildSettings-iphonesimulator.txt'
+xcodebuild build -showBuildSettings -sdk iphonesimulator -project TestProject-Library-XCTest-iOS/TestProject-Library-XCTest-iOS.xcodeproj -target TestProject-Library-XCTest-iOSTests > $OUTFILE
 
 # TestProject-Library-XCTest-OSX-showBuildSettings.txt
 OUTFILE='TestProject-Library-XCTest-OSX-showBuildSettings.txt'
@@ -108,3 +108,24 @@ xcodebuild build -showBuildSettings -project TestsWithArgAndEnvSettingsInRunActi
 # TestWorkspace-Library-TestProject-Library-showBuildSettings.txt
 OUTFILE='TestWorkspace-Library-TestProject-Library-showBuildSettings.txt'
 xcodebuild build -showBuildSettings -workspace TestWorkspace-Library/TestWorkspace-Library.xcworkspace/ -scheme TestProject-Library > $OUTFILE
+
+# TestProject-TVApp-TestProject-TVApp-showBuildSettings.txt
+OUTFILE='TestProject-TVApp-TestProject-TVApp-showBuildSettings.txt'
+xcodebuild build -showBuildSettings -project TestProject-TVApp/TestProject-TVApp.xcodeproj/ -scheme TestProject-TVApp -sdk appletvsimulator > $OUTFILE
+
+# TestProject-TVApp-TestProject-TVAppTests-showBuildSettings.txt
+OUTFILE='TestProject-TVApp-TestProject-TVAppTests-showBuildSettings.txt'
+xcodebuild build -showBuildSettings -project TestProject-TVApp/TestProject-TVApp.xcodeproj/ -target TestProject-TVAppTests -sdk appletvsimulator > $OUTFILE
+
+# TestProject-TVFramework-TestProject-TVFramework-showBuildSettings.txt
+OUTFILE='TestProject-TVFramework-TestProject-TVFramework-showBuildSettings.txt'
+xcodebuild build -showBuildSettings -project TestProject-TVFramework/TestProject-TVFramework.xcodeproj/ -scheme TestProject-TVFramework -sdk appletvsimulator > $OUTFILE
+
+# TestProject-TVApp-TestProject-TVAppTests-showBuildSettings.txt
+OUTFILE='TestProject-TVFramework-TestProject-TVFrameworkTests-showBuildSettings.txt'
+xcodebuild build -showBuildSettings -project TestProject-TVFramework/TestProject-TVFramework.xcodeproj/ -target TestProject-TVFrameworkTests -sdk appletvsimulator > $OUTFILE
+
+# manually
+# remove unexpected events from
+# ./xctool.sh -project xctool/xctool-tests/TestData/TestProject-TVFramework/TestProject-TVFramework.xcodeproj/ -scheme TestProject-TVFramework -sdk appletvsimulator run-tests -only TestProject-TVFrameworkTests:TestProject_TVFrameworkTests/testWillPass,TestProject_TVFrameworkTests/testWillFail,TestProject_TVFrameworkTests/testPrintSDK,TestProject_TVFrameworkTests/testStream -reporter json-stream:xctool/xctool-tests/TestData/TestProject-TVFramework-TestProject-TVFrameworkTests-test-results.txt
+

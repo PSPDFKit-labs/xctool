@@ -21,6 +21,9 @@
 
 #import "FakeTaskManager.h"
 
+static NSString * const kSIMCTL_OTEST_SHIM_STDOUT_FILE = @"SIMCTL_CHILD_OTEST_SHIM_STDOUT_FILE";
+static NSString * const kOTEST_SHIM_STDOUT_FILE = @"OTEST_SHIM_STDOUT_FILE";
+
 static void writeAll(int fildes, const void *buf, size_t nbyte) {
   while (nbyte > 0) {
     ssize_t written = write(fildes, buf, nbyte);
@@ -29,6 +32,9 @@ static void writeAll(int fildes, const void *buf, size_t nbyte) {
     buf += written;
   }
 }
+
+// method defined in otest-shim.
+void __exit(int code);
 
 @interface FakeTask ()
 @property (atomic, assign, readwrite) int terminationStatus;
@@ -153,6 +159,17 @@ static void writeAll(int fildes, const void *buf, size_t nbyte) {
     standardErrorIsAPipe = NO;
   }
 
+  NSString *otestShimStdoutFilePath = _environment[kOTEST_SHIM_STDOUT_FILE] ?: _environment[kSIMCTL_OTEST_SHIM_STDOUT_FILE];
+  if (otestShimStdoutFilePath) {
+    // we need to open for writing and close because on the other side
+    // there is blocking opening for read.
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+      int otestShimOutputWriteFD = -1;
+      otestShimOutputWriteFD = open([otestShimStdoutFilePath UTF8String], O_WRONLY);
+      close(otestShimOutputWriteFD);
+    });
+  }
+
   [self setIsRunning:YES];
 
   pid_t forkedPid = fork();
@@ -161,14 +178,15 @@ static void writeAll(int fildes, const void *buf, size_t nbyte) {
   if (forkedPid == 0) {
     if (standardOutputWriteFd != -1) {
       writeAll(standardOutputWriteFd, pretendStandardOutputBytes, pretendStandardOutputLength);
+      close(standardOutputWriteFd);
     }
     if (standardErrorWriteFd != -1) {
       writeAll(standardErrorWriteFd, pretendStandardErrorBytes, pretendStandardErrorLength);
+      close(standardErrorWriteFd);
     }
 
-    // When the process exits, the last open handles to the write side of the
-    // stdout/stderr pipes will be 'widowed' and the other side will see EOFs.
-    exit(0);
+    // call directly to interposed in otest-shim exit.
+    __exit(0);
   } else {
     // If we're working with pipes, we need to make sure we close the
     // write side in the host process - otherwise the pipe never becomes
