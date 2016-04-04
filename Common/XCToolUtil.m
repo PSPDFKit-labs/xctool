@@ -950,7 +950,7 @@ NSString *TestHostPathForBuildSettings(NSDictionary *buildSettings)
 
 NSString *ProductBundlePathForBuildSettings(NSDictionary *buildSettings)
 {
-  NSString *targetBuildDir = buildSettings[Xcode_TARGET_BUILD_DIR];
+  NSString *builtProductsDir = buildSettings[Xcode_TARGET_BUILD_DIR] ?: buildSettings[Xcode_BUILT_PRODUCTS_DIR];
   NSString *fullProductName = buildSettings[Xcode_FULL_PRODUCT_NAME];
-  return [targetBuildDir stringByAppendingPathComponent:fullProductName];
+  return [builtProductsDir stringByAppendingPathComponent:fullProductName];
 }
